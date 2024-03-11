@@ -5,8 +5,10 @@ connectDB();
 
 //connect passsport jwtstrategy
 const passportJwtStrategy = require("./config/passport-jwt-strategy");
+const rateLimitMiddleware = require("./middlewares/rateLimitMiddleware");
 
 const app = express();
+app.use(rateLimitMiddleware);
 
 // for parsing json
 app.use(express.json());
