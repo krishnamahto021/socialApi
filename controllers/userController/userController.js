@@ -1,4 +1,5 @@
 const User = require("../../models/userModel");
+const mongoose = require("mongoose");
 const Follow = require("../../models/followModel");
 const passwordHelper = require("../../helpers/passwordHelper");
 const jwt = require("jsonwebtoken");
@@ -45,7 +46,7 @@ module.exports.signUp = async (req, res) => {
   }
 };
 
-module.exports.singIn = async (req, res) => {
+module.exports.signIn = async (req, res) => {
   try {
     const { username, password } = req.body;
     const user = await User.findOne({ username });
@@ -56,7 +57,7 @@ module.exports.singIn = async (req, res) => {
       );
       if (matchPassword) {
         const jwtToken = await jwt.sign(
-          user.tosend(),
+          user.toJSON(),
           process.env.JWT_SECRET_KEY,
           {
             expiresIn: "60d",
@@ -76,7 +77,7 @@ module.exports.singIn = async (req, res) => {
         });
       }
     } else {
-      return res.status({
+      return res.status(400).send({
         success: false,
         message: "You are not registered",
       });
@@ -276,6 +277,63 @@ module.exports.getFollowersAndFollowing = async (req, res) => {
   } catch (error) {
     console.error("Error retrieving follower and following lists:", error);
     return res.status(500).send({
+      success: false,
+      message: "Internal server error",
+      error: error.message,
+    });
+  }
+};
+
+module.exports.getSocialFeed = async (req, res) => {
+  try {
+    const userId = new mongoose.Types.ObjectId(req.user.id); 
+    const page = req.query.page ? parseInt(req.query.page) : 1; // Current page number
+    const pageSize = 10; // Number of items per page
+
+    const socialFeed = await Follow.aggregate([
+      // Match documents where the current user is the follower
+      { $match: { follower: userId } },
+      // Lookup posts from the users the current user is following
+      {
+        $lookup: {
+          from: "posts",
+          localField: "following",
+          foreignField: "createdBy",
+          as: "posts",
+        },
+      },
+      // Unwind posts array to flatten it
+      { $unwind: "$posts" },
+      // Add current timestamp field
+      {
+        $addFields: {
+          currentTimestamp: new Date(), // Add current timestamp field
+        },
+      },
+      // Sort posts by timestamp in descending order to get the most recent ones
+      { $sort: { "posts.timestamp": -1 } },
+      // Group by postId to remove duplicate posts
+      {
+        $group: {
+          _id: "$posts._id",
+          textContent: { $first: "$posts.textContent" },
+          timestamp: { $first: "$posts.timestamp" },
+          createdBy: { $first: "$posts.createdBy" },
+        },
+      },
+      // Optionally, add pagination
+      { $skip: (page - 1) * pageSize },
+      { $limit: pageSize },
+    ]);
+
+    return res.status(200).json({
+      success: true,
+      message: "Social feed retrieved successfully",
+      socialFeed,
+    });
+  } catch (error) {
+    console.error("Error retrieving social feed:", error);
+    return res.status(500).json({
       success: false,
       message: "Internal server error",
       error: error.message,

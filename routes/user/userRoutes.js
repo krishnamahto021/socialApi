@@ -4,7 +4,7 @@ const userController = require("../../controllers/userController/userController"
 const passport = require("passport");
 
 router.post("/sign-up", userController.signUp);
-router.post("/sign-in", userController.singIn);
+router.post("/sign-in", userController.signIn);
 router.get("/view-profile/:id", userController.viewProfile);
 router.post(
   "/update-profile",
@@ -27,6 +27,12 @@ router.get(
   "/follow",
   passport.authenticate("jwt", { session: false }),
   userController.getFollowersAndFollowing
+);
+
+router.get(
+  "/feed-post",
+  passport.authenticate("jwt", { session: false }),
+  userController.getSocialFeed
 );
 
 module.exports = router;
