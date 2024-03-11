@@ -17,4 +17,16 @@ router.delete(
   userController.deleteUser
 );
 
+router.post(
+  "/follow/:id",
+  passport.authenticate("jwt", { session: false }),
+  userController.toggleFollow
+);
+
+router.get(
+  "/follow",
+  passport.authenticate("jwt", { session: false }),
+  userController.getFollowersAndFollowing
+);
+
 module.exports = router;

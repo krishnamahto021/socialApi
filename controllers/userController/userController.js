@@ -1,4 +1,5 @@
 const User = require("../../models/userModel");
+const Follow = require("../../models/followModel");
 const passwordHelper = require("../../helpers/passwordHelper");
 const jwt = require("jsonwebtoken");
 
@@ -55,7 +56,7 @@ module.exports.singIn = async (req, res) => {
       );
       if (matchPassword) {
         const jwtToken = await jwt.sign(
-          user.toJSON(),
+          user.tosend(),
           process.env.JWT_SECRET_KEY,
           {
             expiresIn: "60d",
@@ -166,7 +167,7 @@ module.exports.deleteUser = async (req, res) => {
     // Check if the user exists
     const user = await User.findById(id);
     if (!user) {
-      return res.status(404).json({
+      return res.status(404).send({
         success: false,
         message: "User not found",
       });
@@ -174,13 +175,107 @@ module.exports.deleteUser = async (req, res) => {
 
     await User.deleteOne({ _id: id });
 
-    return res.status(200).json({
+    return res.status(200).send({
       success: true,
       message: "User deleted successfully",
     });
   } catch (error) {
     console.error("Error deleting user:", error);
-    return res.status(500).json({
+    return res.status(500).send({
+      success: false,
+      message: "Internal server error",
+      error: error.message,
+    });
+  }
+};
+
+module.exports.toggleFollow = async (req, res) => {
+  try {
+    const { id: userIdToFollow } = req.params;
+    const followerId = req.user.id;
+
+    // Check if the user to follow exists
+    const userExists = await User.exists({ _id: userIdToFollow });
+    if (!userExists) {
+      return res.status(404).json({
+        success: false,
+        message: "User to follow not found",
+      });
+    }
+
+    // Check if there is an existing follow relationship
+    const existingFollow = await Follow.findOneAndDelete({
+      follower: followerId,
+      following: userIdToFollow,
+    });
+
+    // Toggle follow/unfollow based on the existence of the follow relationship
+    if (existingFollow) {
+      return res.status(200).send({
+        success: true,
+        message: "Unfollowed user successfully",
+      });
+    } else {
+      // Follow
+      const newFollow = await Follow.create({
+        follower: followerId,
+        following: userIdToFollow,
+      });
+      return res.status(200).send({
+        success: true,
+        message: "Followed user successfully",
+        follow: newFollow,
+      });
+    }
+  } catch (error) {
+    console.error("Error toggling follow:", error);
+    return res.status(500).send({
+      success: false,
+      message: "Internal server error",
+      error: error.message,
+    });
+  }
+};
+
+module.exports.getFollowersAndFollowing = async (req, res) => {
+  try {
+    const userId = req.user.id;
+
+    // Find all follow relationships where the current user is being followed
+    const followerList = await Follow.find({ following: userId }).populate(
+      "follower",
+      "username bio profilePicture"
+    );
+
+    // Find all follow relationships where the current user is the follower
+    const followingList = await Follow.find({ follower: userId }).populate(
+      "following",
+      "username bio profilePicture"
+    );
+
+    // Extract follower details from the follower list
+    const followers = followerList.map((follow) => ({
+      username: follow.follower.username,
+      bio: follow.follower.bio,
+      profilePicture: follow.follower.profilePicture,
+    }));
+
+    // Extract following user details from the following list
+    const following = followingList.map((follow) => ({
+      username: follow.following.username,
+      bio: follow.following.bio,
+      profilePicture: follow.following.profilePicture,
+    }));
+
+    return res.status(200).send({
+      success: true,
+      message: "Follower and following lists retrieved successfully",
+      followers,
+      following,
+    });
+  } catch (error) {
+    console.error("Error retrieving follower and following lists:", error);
+    return res.status(500).send({
       success: false,
       message: "Internal server error",
       error: error.message,
